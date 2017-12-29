@@ -6,6 +6,7 @@ import statistics
 import threading
 import queue
 import msvcrt
+import winsound
 
 from pytesseract import image_to_string
 from PIL import Image
@@ -77,9 +78,9 @@ def getGoodDictionaryCV():
 
     goodDict = {}
     while True:
-        ImageGrab.grab().save('screen_capture.jpg', 'JPEG')
+        ImageGrab.grab().save('screen_capture.png', 'PNG')
 
-        img = cv2.imread('test.png', cv2.IMREAD_UNCHANGED)
+        img = cv2.imread('screen_capture.png', cv2.IMREAD_UNCHANGED)
 
         maskName = cv2.inRange(img, lower_name_rgb, upper_name_rgb)
         maskPrice = cv2.inRange(img, lower_price_rgb, upper_price_rgb)
@@ -93,6 +94,7 @@ def getGoodDictionaryCV():
         goodImageString = image_to_string(Image.open("th1.png")).lower()
         for availableGood in available_goods:
             if availableGood in goodImageString:
+                print("Found: " + availableGood)
                 goodName = availableGood
 
         # Look for a price
@@ -102,6 +104,7 @@ def getGoodDictionaryCV():
             if "buy price:" in line.lower() or "sell price" in line.lower():
                 for word in line.split(' '):
                     if isInteger(word):
+                        print("Price: " + word)
                         price = int(word)
 
         # Update goodDict if necessary
@@ -118,6 +121,7 @@ def getGoodDictionaryCV():
         except queue.Empty:
             pass
 
+        winsound.Beep(3000, 300)
         print("Sleeping")
         time.sleep(1/10)
 
