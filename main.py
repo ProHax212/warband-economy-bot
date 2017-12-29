@@ -70,11 +70,11 @@ def getGoodDictionaryCV():
     t = threading.Thread(target=inputThread)
     t.start()
 
-    lower_name_rgb = np.array([82, 90, 95], dtype="uint8")
-    upper_name_rgb = np.array([213, 226, 238], dtype="uint8")
+    lower_name_rgb = np.array([52, 55, 58], dtype="uint8")
+    upper_name_rgb = np.array([232, 239, 247], dtype="uint8")
 
-    lower_price_rgb = np.array([26, 78, 85], dtype="uint8")
-    upper_price_rgb = np.array([50, 181, 198], dtype="uint8")
+    lower_price_rgb = np.array([18, 62, 67], dtype="uint8")
+    upper_price_rgb = np.array([104, 205, 217], dtype="uint8")
 
     goodDict = {}
     while True:
