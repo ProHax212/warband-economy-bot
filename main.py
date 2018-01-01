@@ -70,45 +70,84 @@ def getGoodDictionaryCV():
     t = threading.Thread(target=inputThread)
     t.start()
 
-    lower_name_rgb = np.array([52, 55, 58], dtype="uint8")
-    upper_name_rgb = np.array([232, 239, 247], dtype="uint8")
-
-    lower_price_rgb = np.array([18, 62, 67], dtype="uint8")
-    upper_price_rgb = np.array([104, 205, 217], dtype="uint8")
+    name_rgb = np.array([208, 224, 240])
+    price_rgb = np.array([51, 187, 204])
 
     goodDict = {}
     while True:
         ImageGrab.grab().save('screen_capture.png', 'PNG')
+        img = cv2.imread('screen_capture.png')
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        cv2.imwrite("gray.png", gray)
 
-        img = cv2.imread('screen_capture.png', cv2.IMREAD_UNCHANGED)
+        nameMask = cv2.inRange(img, name_rgb, name_rgb)
+        priceMask = cv2.inRange(img, price_rgb, price_rgb)
 
-        maskName = cv2.inRange(img, lower_name_rgb, upper_name_rgb)
-        maskPrice = cv2.inRange(img, lower_price_rgb, upper_price_rgb)
+        cv2.imwrite("nameMask.png", nameMask)
+        cv2.imwrite("priceMask.png", priceMask)
 
-        cv2.imwrite("th1.png", maskName)    # Name
-        cv2.imwrite("th2.png", maskPrice)   # Price
+        kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+        numIterations = 2
+        nameDilated = cv2.dilate(nameMask, kernel, iterations=numIterations)
+        priceDilated = cv2.dilate(priceMask, kernel, iterations=numIterations)
+
+        # Get contours for the price
+        image, contoursPrice, hierarchy = cv2.findContours(priceDilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        img_copy = img.copy()
+        point_list = []
+        for contour in contoursPrice:
+            for point in contour:
+                point_list.append(point)
+
+        # Get contours for the name
+        image, contoursName, hierarchy = cv2.findContours(nameDilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contoursName:
+            for point in contour:
+                point_list.append(point)
+
+        main_contour = np.array(point_list).reshape(-1, 1, 2).astype(np.int32)
+        [x, y, w, h] = cv2.boundingRect(cv2.convexHull(main_contour, returnPoints=True))
+
+        # No text found
+        if w == 0 or h == 0:
+            # Check for quit key
+            try:
+                key = q.get(block=False)
+                print(key)
+                if key == stopKey:
+                    break
+            except queue.Empty:
+                pass
+            continue
+
+        roi = gray.copy()[y:y+h, x:x+w]
+        blur = cv2.GaussianBlur(roi, (5, 5), 0)
+        cv2.imwrite("blur.png", blur)
+        ret, th1 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+        cv2.imwrite("th1.png", th1)
+        image_string = image_to_string(Image.open("th1.png"))
+        print("------\n%s\n------" % image_string)
+        image_string_lines = image_string.split('\n')
 
         # Look for a good name
-        print("Checking good name")
         goodName = ""
-        goodImageString = image_to_string(Image.open("th1.png")).lower()
+        potentialGoodName = image_string_lines[0].lower()
+        print("Potential name: " + potentialGoodName)
         for availableGood in available_goods:
-            if availableGood in goodImageString:
+            if availableGood in potentialGoodName:
                 print("Found: " + availableGood)
-                goodName = availableGood
+                goodName = potentialGoodName
 
         # Look for a price
-        print("Checking price")
         price = 0
-        for line in image_to_string(Image.open("th2.png")).split('\n'):
-            if "buy price:" in line.lower() or "sell price" in line.lower():
-                for word in line.split(' '):
-                    if isInteger(word):
-                        print("Price: " + word)
-                        price = int(word)
+        for line in image_string_lines:
+            if 'price' in line.lower():
+                word = line.split(':')[1].strip()
+                if isInteger(word):
+                    print("Found price: " + word)
+                    price = int(word)
 
         # Update goodDict if necessary
-        print("Update dictionary")
         if goodName != "" and price != 0:
             goodDict[goodName] = price
 
@@ -120,10 +159,7 @@ def getGoodDictionaryCV():
                 break
         except queue.Empty:
             pass
-
         winsound.Beep(3000, 300)
-        print("Sleeping")
-        time.sleep(1/10)
 
     return goodDict
 
