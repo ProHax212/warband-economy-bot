@@ -38,6 +38,8 @@ available_towns = ["suno", "praven", "uxkhal", "dhirim", "reyvadin", "khudan", "
 # List of available villages on the map
 available_villages = ["yaragar", "burglen", "azgad", "nomar", "emirin", "amere", "nemeja", "ryibelet", "tosdhar", "ruluns", "ehlerdah", "ibiran", "veidar", "balanli", "chide", "tadsamesh", "ushkuru", "tahlberl", "rduna", "iyindah", "tshibtin", "elberl", "yalibe", "gisim", "sumbuja", "shapeshte", "mazen", "ulburban", "hanun", "uslum", "bazeck", "shulus", "tismirr", "karindi", "vezin", "rebache", "fisdnar", "tebandra", "ayyike", "ismirala", "slezkh", "udiniad", "dusturil", "dashbigha", "tash kulun", "ada kulun", "dugan", "dirigh aban", "zagush", "peshmi", "bulugur", "amashke", "bhulaban", "kedelke", "tulbuk", "uhhun", "kulum", "haen", "mechin", "buillin", "ruvar", "ambean", "fearichen", "jayek", "jelbegi", "fenada", "aldelen", "kwynn", "rizi", "vayejeg", "odasan", "buvran", "emer", "ilvia", "ruldi", "pagundur", "glunmar", "reveran", "saren", "fedner", "epeshe", "dumar", "serindiar", "idbeles", "dirigsene", "chaeza", "sarimish", "istiniar", "chelez", "jamiche", "ayn assuadi", "dhibbain", "qalyut", "mazigh", "tamnuh", "habba", "sekhtem", "mawiti", "fishara", "iqbayl", "uzgha", "shibal", "zumr", "mijayet", "tazjunat", "aab", "hawaha", "unriya", "mit nun", "tilimsal", "rushdigh"]
 available_goods = ["ale", "date fruit", "dyes", "flax bundle", "furs", "hemp", "hides", "iron", "leatherwork", "linen", "oil", "pottery", "powder", "raw silk", "salt", "shag", "spice", "tools", "velvet", "vodka", "wine", "wool", "wool cloth"]
+# Words that modify the value of a good
+modifier_words = ["masterwork", "exquisite", "lordly", "strong", "hardened", "thick", "well made", "fine", "sturdy", "cheap", "old", "crude", "poor", "ragged", "rough", "rusty"]
 
 # Print the instructions to the screen
 def printInstructions():
@@ -64,6 +66,14 @@ def isInteger(word):
     except:
         return False
 
+# Determine if a word is a float
+def isFloat(word):
+    try:
+        float(word)
+        return True
+    except:
+        return False
+
 # Use OpenCV to scan the screen for goods and their prices
 def getGoodDictionaryCV():
     # Start input thread to check for quit
@@ -75,16 +85,15 @@ def getGoodDictionaryCV():
 
     goodDict = {}
     while True:
-        ImageGrab.grab().save('screen_capture.png', 'PNG')
+        winsound.Beep(1000, 300)
+        ImageGrab.grab().save("screen_capture.png")
+        winsound.Beep(1500, 300)
         img = cv2.imread('screen_capture.png')
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         cv2.imwrite("gray.png", gray)
 
         nameMask = cv2.inRange(img, name_rgb, name_rgb)
         priceMask = cv2.inRange(img, price_rgb, price_rgb)
-
-        cv2.imwrite("nameMask.png", nameMask)
-        cv2.imwrite("priceMask.png", priceMask)
 
         kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
         numIterations = 2
@@ -126,30 +135,33 @@ def getGoodDictionaryCV():
         ret, th1 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
         cv2.imwrite("th1.png", th1)
         image_string = image_to_string(Image.open("th1.png"))
-        print("------\n%s\n------" % image_string)
         image_string_lines = image_string.split('\n')
+        
+        # Not enough lines
+        if len(image_string_lines) <= 1:
+            continue
 
         # Look for a good name
-        goodName = ""
-        potentialGoodName = image_string_lines[0].lower()
-        print("Potential name: " + potentialGoodName)
-        for availableGood in available_goods:
-            if availableGood in potentialGoodName:
-                print("Found: " + availableGood)
-                goodName = potentialGoodName
+        goodName = image_string_lines[0].lower().strip()
 
         # Look for a price
         price = 0
         for line in image_string_lines:
             if 'price' in line.lower():
-                word = line.split(':')[1].strip()
+                splitLine = line.split(':')
+                # Not enough words
+                if len(splitLine) <= 1:
+                    break
+                word = splitLine[1].strip()
+                word = ''.join(c for c in word if c.isdigit())
                 if isInteger(word):
-                    print("Found price: " + word)
                     price = int(word)
+                    break
 
         # Update goodDict if necessary
         if goodName != "" and price != 0:
             goodDict[goodName] = price
+            winsound.Beep(2000, 300)
 
         # Check for quit key
         try:
@@ -159,7 +171,6 @@ def getGoodDictionaryCV():
                 break
         except queue.Empty:
             pass
-        winsound.Beep(3000, 300)
 
     return goodDict
 
@@ -173,25 +184,10 @@ def addBuyPrice():
 
     goodDict = getGoodDictionaryCV()
     print(goodDict)
-    return
-
-    # Keep collecting input goods for the place
-    while True:
-        # Get the good
-        good = input("Good: ")
-        if good == "q":
-            break
-        if good not in available_goods:
-            print("Invalid Good")
-            continue
-        # Get the price
-        price = input("Price: ")
-        try:
-            price = int(price)
-        except:
-            print("Not a number")
-            continue
-        
+    keep = input("keep?: ")
+    if keep.lower() != "yes":
+        return
+    for good, price in goodDict.items():
         # Get mongo collection
         collection = db["buyPrice"]
 
@@ -218,24 +214,12 @@ def addSellPrice():
         print("Invalid place")
         return
 
-    # Keep getting input goods for the place
-    while True:
-        # Get the good
-        good = input("Good: ")
-        if good == "q":
-            break
-        if good not in available_goods:
-            print("Invalid Good")
-            continue
-
-        # Get the price
-        price = input("Price: ")
-        try:
-            price = int(price)
-        except:
-            print("Not an integer")
-            continue
-        
+    goodDict = getGoodDictionaryCV()
+    print(goodDict)
+    keep = input("keep?: ")
+    if keep.lower() != "yes":
+        return
+    for good, price in goodDict.items():
         # Get collections for mongo
         collection = db["sellPrice"]
 
